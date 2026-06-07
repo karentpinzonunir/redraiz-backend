@@ -5,6 +5,7 @@ const allowedOrigins = [
     'http://localhost:5173',
     'http://localhost:3000',
     'https://redraiz-backend.vercel.app',
+    'https://redraiz.vercel.app/'
     // Agrega aquí la URL de tu frontend cuando lo subas a Vercel
     // 'https://tu-frontend.vercel.app',
 ];
