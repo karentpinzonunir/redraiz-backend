@@ -19,10 +19,19 @@ export async function POST(req: Request) {
     historia,
   } = body;
 
-  // Validación mínima (ajusta a tu gusto)
-  if (!nombre || !apellido || !ciudad || !telefono || !correo || !tipo_producto) {
+  // Campos requeridos según el formulario
+  if (!nombre || !ciudad || !telefono || !correo || !tipo_producto || !historia) {
     return NextResponse.json(
       { ok: false, error: 'Faltan campos requeridos' },
+      { status: 400 }
+    );
+  }
+
+  // Validación de formato de correo
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(correo)) {
+    return NextResponse.json(
+      { ok: false, error: 'El correo electrónico no es válido' },
       { status: 400 }
     );
   }
@@ -41,13 +50,13 @@ export async function POST(req: Request) {
     .from('contacto')
     .insert({
       nombre,
-      apellido,
-      nombre_finca: nombre_finca ?? null,
+      apellido: apellido ?? null,       // opcional
+      nombre_finca: nombre_finca ?? null, // opcional
       ciudad,
       telefono,
       correo,
-      tipo_producto: tipoProductoAsNumber, // FK a tabla tipos
-      historia: historia ?? null,
+      tipo_producto: tipoProductoAsNumber,
+      historia,
     })
     .select('*')
     .single();
