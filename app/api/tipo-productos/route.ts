@@ -3,9 +3,9 @@ import { NextResponse } from 'next/server';
 
 export async function GET() {
     const { data, error } = await supabase
-        .from('tipo_productos') // <-- cambia este nombre si tu tabla se llama distinto
+        .from('tipo_productos') 
         .select('id,nombre')
-        .order('nombre', { ascending: true });
+        .order('id', { ascending: true });
 
     if (error) {
         return NextResponse.json({ ok: false, error: error.message }, { status: 400 });
