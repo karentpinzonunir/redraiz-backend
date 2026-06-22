@@ -1,20 +1,20 @@
 import { supabase } from '@/lib/supabase';
 import { NextResponse } from 'next/server';
 
-export async function GET(request, { params }) {
-    const { id } = params;
+export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
 
-    // Validar que el ID sea un número
-    if (!id || isNaN(id)) {
-        return NextResponse.json(
-            { ok: false, error: 'ID de productor inválido' },
-            { status: 400 }
-        );
-    }
+  // Validar que el ID sea numérico
+  if (!id || isNaN(Number(id))) {
+    return NextResponse.json(
+      { ok: false, error: 'ID de productor inválido' },
+      { status: 400 }
+    );
+  }
 
-    const { data, error } = await supabase
-        .from('productores')
-        .select(`
+  const { data, error } = await supabase
+    .from('productores')
+    .select(`
       *,
       region:regiones (
         id,
@@ -25,23 +25,23 @@ export async function GET(request, { params }) {
         nombre
       )
     `)
-        .eq('id', id)
-        .eq('estado', true)
-        .single(); // Usamos .single() porque esperamos solo un resultado
+    .eq('id', id)
+    .eq('estado', true)
+    .single();
 
-    if (error) {
-        return NextResponse.json(
-            { ok: false, error: error.message },
-            { status: 500 }
-        );
-    }
+  if (error) {
+    return NextResponse.json(
+      { ok: false, error: error.message },
+      { status: 500 }
+    );
+  }
 
-    if (!data) {
-        return NextResponse.json(
-            { ok: false, error: 'Productor no encontrado' },
-            { status: 404 }
-        );
-    }
+  if (!data) {
+    return NextResponse.json(
+      { ok: false, error: 'Productor no encontrado' },
+      { status: 404 }
+    );
+  }
 
-    return NextResponse.json({ ok: true, data });
+  return NextResponse.json({ ok: true, data });
 }
