@@ -1,124 +1,124 @@
 // app/api/productos/route.ts
+import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
-import { NextResponse } from 'next/server';
-import { NextRequest } from 'next/server';
 
 export async function GET(request: NextRequest) {
     try {
         const { searchParams } = new URL(request.url);
 
-        // Parámetros de paginación
-        const limit = parseInt(searchParams.get('limit') || '10');
-        const offset = parseInt(searchParams.get('offset') || '0');
-
-        // Parámetros de filtrado
+        const limit = Math.max(1, parseInt(searchParams.get('limit') || '10'));
+        const offset = Math.max(0, parseInt(searchParams.get('offset') || '0'));
         const regionId = searchParams.get('region');
         const productorId = searchParams.get('productor');
         const productoId = searchParams.get('producto');
         const categoriaId = searchParams.get('categoria');
 
-        // Construimos la consulta base
+        // 1) Obtener filas de la tabla correcta: productor_productos
         let query = supabase
-            .from('producto_productor')
+            .from('productor_productos')
             .select('*')
             .eq('estado', true);
 
-        // Agregamos filtros si se proporcionan
-        if (regionId) {
-            query = query.eq('id_region', regionId);
+        if (regionId) query = query.eq('id_region', regionId);
+        if (productorId) query = query.eq('id_productor', productorId);
+        if (productoId) query = query.eq('id_producto', productoId);
+
+        const { data: rows, error: rowsError } = await query.range(offset, offset + limit - 1);
+        if (rowsError) {
+            return NextResponse.json({ ok: false, error: rowsError.message }, { status: 500 });
         }
 
-        if (productorId) {
-            query = query.eq('id_productor', productorId);
+        if (!rows || rows.length === 0) {
+            return NextResponse.json({
+                ok: true,
+                data: [],
+                count: 0,
+                limit,
+                offset
+            });
         }
 
-        if (productoId) {
-            query = query.eq('id_producto', productoId);
-        }
+        // 2) Recolectar ids únicos para hacer fetch en lote
+        const productoIds = Array.from(new Set(rows.map((r: any) => r.id_producto))).filter(Boolean);
+        const productorIds = Array.from(new Set(rows.map((r: any) => r.id_productor))).filter(Boolean);
+        const regionIds = Array.from(new Set(rows.map((r: any) => r.id_region))).filter(Boolean);
 
-        // Aplicamos paginación
-        const { data, error } = await query
-            .range(offset, offset + limit - 1);
+        // 3) Traer productos en lote
+        const { data: productosData } = await supabase
+            .from('productos')
+            .select('id, nombre, descripcion, id_categoria, imagen, estado')
+            .in('id', productoIds);
 
-        if (error) {
-            return NextResponse.json(
-                { ok: false, error: error.message },
-                { status: 500 }
-            );
-        }
+        // Filtrar productos desactivados si corresponde
+        const productosMap = new Map<number, any>();
+        (productosData || []).forEach((p: any) => {
+            productosMap.set(Number(p.id), p);
+        });
 
-        // Obtenemos la información adicional para cada registro
-        const productosActivos = [];
+        // 4) Recolectar ids de categorías desde los productos encontrados
+        const categoriaIds = Array.from(
+            new Set((productosData || []).map((p: any) => p.id_categoria))
+        ).filter(Boolean);
 
-        for (const item of data) {
-            // Obtener información del producto
-            const { data: productoData, error: productoError } = await supabase
-                .from('productos')
-                .select('*')
-                .eq('id', item.id_producto)
-                .eq('estado', true)
-                .single();
+        // 5) Traer categorías en lote
+        const { data: categoriasData } = await supabase
+            .from('categorias')
+            .select('id, nombre')
+            .in('id', categoriaIds);
 
-            // Si hay error al obtener el producto o no existe, continuar con el siguiente
-            if (productoError || !productoData) {
-                continue;
-            }
+        const categoriasMap = new Map<number, any>();
+        (categoriasData || []).forEach((c: any) => categoriasMap.set(Number(c.id), c));
 
-            // Verificar filtro de categoría
-            if (categoriaId && productoData.id_categoria != categoriaId) {
-                continue;
-            }
+        // 6) Traer productores y regiones en lote
+        const { data: productoresData } = await supabase
+            .from('productores')
+            .select('id, nombre, apellido, telefono, correo, imagen, id_region, id_categoria')
+            .in('id', productorIds);
 
-            // Obtener información de la categoría
-            const { data: categoriaData, error: categoriaError } = await supabase
-                .from('categorias')
-                .select('*')
-                .eq('id', productoData.id_categoria)
-                .single();
+        const productoresMap = new Map<number, any>();
+        (productoresData || []).forEach((p: any) => productoresMap.set(Number(p.id), p));
 
-            // Obtener información de la región
-            const { data: regionData, error: regionError } = await supabase
-                .from('regiones')
-                .select('*')
-                .eq('id', item.id_region)
-                .single();
+        const { data: regionesData } = await supabase
+            .from('regiones')
+            .select('id, nombre')
+            .in('id', regionIds);
 
-            // Obtener información del productor
-            const { data: productorData, error: productorError } = await supabase
-                .from('productores')
-                .select('*')
-                .eq('id', item.id_productor)
-                .single();
+        const regionesMap = new Map<number, any>();
+        (regionesData || []).forEach((r: any) => regionesMap.set(Number(r.id), r));
 
-            // Solo agregar si no hay errores en las consultas relacionadas
-            if (!categoriaError && !regionError && !productorError) {
-                productosActivos.push({
-                    id: item.id,
-                    precio: item.precio,
-                    estado: item.estado,
-                    id_producto: item.id_producto,
-                    id_productor: item.id_productor,
-                    id_region: item.id_region,
-                    producto: productoData,
-                    categoria: categoriaData,
-                    region: regionData,
-                    productor: productorData
-                });
-            }
-        }
+        // 7) Construir respuesta y aplicar filtro por categoria si se indicó
+        const result = rows
+            .map((row: any) => {
+                const producto = productosMap.get(Number(row.id_producto)) || null;
+                const categoria = producto ? categoriasMap.get(Number(producto.id_categoria)) || null : null;
+
+                return {
+                    id: row.id,
+                    precio: row.precio,
+                    estado: row.estado,
+                    id_producto: row.id_producto,
+                    id_productor: row.id_productor,
+                    id_region: row.id_region,
+                    producto,
+                    categoria,
+                    region: regionesMap.get(Number(row.id_region)) || null,
+                    productor: productoresMap.get(Number(row.id_productor)) || null
+                };
+            })
+            .filter((item: any) => {
+                if (!item.producto) return false; // producto no existe o está desactivado
+                if (categoriaId && String(item.producto.id_categoria) !== String(categoriaId)) return false;
+                return true;
+            });
 
         return NextResponse.json({
             ok: true,
-            data: productosActivos,
-            count: productosActivos.length,
+            data: result,
+            count: result.length,
             limit,
             offset
         });
-
-    } catch (error: any) {
-        return NextResponse.json(
-            { ok: false, error: error.message },
-            { status: 500 }
-        );
+    } catch (err: any) {
+        return NextResponse.json({ ok: false, error: err.message || String(err) }, { status: 500 });
     }
 }
