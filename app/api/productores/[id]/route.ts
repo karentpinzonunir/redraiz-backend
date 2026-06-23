@@ -54,11 +54,17 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
   const productoIds = relaciones.map(rel => rel.id_producto);
 
+  // ...
+
   let productos = [];
   if (productoIds.length > 0) {
     const { data, error: errorProductos } = await supabase
       .from('productos')
-      .select('*')
+      .select(`
+      *,
+      categoria:categorias (id, nombre),
+      region:regiones (id, nombre)
+    `)
       .in('id', productoIds)
       .eq('estado', true);
 
