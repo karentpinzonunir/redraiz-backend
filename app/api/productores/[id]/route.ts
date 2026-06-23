@@ -37,10 +37,14 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     );
   }
 
-  // Obtener productos del productor
+  // Obtener productos del productor con región asociada
   const { data: relaciones, error: errorRelaciones } = await supabase
     .from('productor_productos')
-    .select('id_producto, precio')
+    .select(`
+      id_producto,
+      precio,
+      region:regiones (id, nombre)
+    `)
     .eq('id_productor', id)
     .eq('estado', true);
 
@@ -54,17 +58,14 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
   const productoIds = relaciones.map(rel => rel.id_producto);
 
-  // ...
-
   let productos = [];
   if (productoIds.length > 0) {
     const { data, error: errorProductos } = await supabase
       .from('productos')
       .select(`
-      *,
-      categoria:categorias (id, nombre),
-      region:regiones (id, nombre)
-    `)
+        *,
+        categoria:categorias (id, nombre)
+      `)
       .in('id', productoIds)
       .eq('estado', true);
 
@@ -76,12 +77,14 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       );
     }
 
-    // Combinar precios
+    // Combinar precios, regiones y categorías
     productos = data.map(producto => {
       const relacion = relaciones.find(r => r.id_producto === producto.id);
       return {
         ...producto,
-        precio: relacion ? relacion.precio : null
+        precio: relacion?.precio || null,
+        region: relacion?.region || null,
+        categoria: producto.categoria
       };
     });
   }
@@ -101,10 +104,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     );
   }
 
-  // Extraer solo las rutas de las imágenes
   const galeriaImagenes = galeria.map(item => item.imagen);
 
-  // Devolver todo junto
+  // Devolver todo
   return NextResponse.json({
     ok: true,
     data: {
