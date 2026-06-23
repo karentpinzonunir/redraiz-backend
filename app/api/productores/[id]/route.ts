@@ -4,9 +4,7 @@ import { NextResponse } from 'next/server';
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
 
-  console.log("ID recibido:", id);
-
-  // Primero obtenemos al productor con región y categoría
+  // Obtener productor con región y categoría
   const { data: productor, error: errorProductor } = await supabase
     .from('productores')
     .select(`
@@ -39,7 +37,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     );
   }
 
-  // Luego obtenemos los productos relacionados con el productor
+  // Obtener productos del productor
   const { data: relaciones, error: errorRelaciones } = await supabase
     .from('productor_productos')
     .select('id_producto, precio')
@@ -54,48 +52,59 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     );
   }
 
-  // Extraemos los IDs de los productos
   const productoIds = relaciones.map(rel => rel.id_producto);
 
-  if (productoIds.length === 0) {
-    return NextResponse.json({
-      ok: true,
-      data: {
-        ...productor,
-        productos: []
-      }
+  let productos = [];
+  if (productoIds.length > 0) {
+    const { data, error: errorProductos } = await supabase
+      .from('productos')
+      .select('*')
+      .in('id', productoIds)
+      .eq('estado', true);
+
+    if (errorProductos) {
+      console.error("Error al obtener detalles de productos:", errorProductos);
+      return NextResponse.json(
+        { ok: false, error: errorProductos.message },
+        { status: 500 }
+      );
+    }
+
+    // Combinar precios
+    productos = data.map(producto => {
+      const relacion = relaciones.find(r => r.id_producto === producto.id);
+      return {
+        ...producto,
+        precio: relacion ? relacion.precio : null
+      };
     });
   }
 
-  // Finalmente traemos los productos completos
-  const { data: productos, error: errorProductos } = await supabase
-    .from('productos')
-    .select('*')
-    .in('id', productoIds)
+  // Obtener imágenes de galería
+  const { data: galeria, error: errorGaleria } = await supabase
+    .from('galerias_productor')
+    .select('imagen')
+    .eq('id_productor', id)
     .eq('estado', true);
 
-  if (errorProductos) {
-    console.error("Error al obtener detalles de productos:", errorProductos);
+  if (errorGaleria) {
+    console.error("Error al obtener galería:", errorGaleria);
     return NextResponse.json(
-      { ok: false, error: errorProductos.message },
+      { ok: false, error: errorGaleria.message },
       { status: 500 }
     );
   }
 
-  // Combinamos precios con productos
-  const productosConPrecio = productos.map(producto => {
-    const relacion = relaciones.find(r => r.id_producto === producto.id);
-    return {
-      ...producto,
-      precio: relacion ? relacion.precio : null
-    };
-  });
+  // Extraer solo las rutas de las imágenes
+  const galeriaImagenes = galeria.map(item => item.imagen);
 
+  // Devolver todo junto
   return NextResponse.json({
     ok: true,
     data: {
       ...productor,
-      productos: productosConPrecio
+      productos,
+      galeria: galeriaImagenes
     }
   });
 }
