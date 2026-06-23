@@ -56,7 +56,7 @@ export async function GET(request: NextRequest) {
         });
 
         // 4) Recolectar ids de categorías desde los productos encontrados
-        const categoriaIds = Array.from(
+        const categoriaIdsFromProductos = Array.from(
             new Set((productosData || []).map((p: any) => p.id_categoria))
         ).filter(Boolean);
 
@@ -64,19 +64,23 @@ export async function GET(request: NextRequest) {
         const { data: categoriasData } = await supabase
             .from('categorias')
             .select('id, nombre')
-            .in('id', categoriaIds);
+            .in('id', categoriaIdsFromProductos);
 
         const categoriasMap = new Map<number, any>();
-        (categoriasData || []).forEach((c: any) => categoriasMap.set(Number(c.id), c));
+        (categoriasData || []).forEach((c: any) => {
+            categoriasMap.set(Number(c.id), c);
+        });
 
-        // 6) Traer productores y regiones en lote
+        // 6) Traer productores y regiones en lote (incluyendo todos los campos necesarios)
         const { data: productoresData } = await supabase
             .from('productores')
-            .select('id, nombre, apellido, telefono, correo, imagen, id_region, id_categoria')
+            .select('id, nombre, descripcion, historia, imagen, latitud, longitud, estado, carpeta, telefono, id_region, id_categoria')
             .in('id', productorIds);
 
         const productoresMap = new Map<number, any>();
-        (productoresData || []).forEach((p: any) => productoresMap.set(Number(p.id), p));
+        (productoresData || []).forEach((p: any) => {
+            productoresMap.set(Number(p.id), p);
+        });
 
         const { data: regionesData } = await supabase
             .from('regiones')
@@ -90,7 +94,14 @@ export async function GET(request: NextRequest) {
         const result = rows
             .map((row: any) => {
                 const producto = productosMap.get(Number(row.id_producto)) || null;
-                const categoria = producto ? categoriasMap.get(Number(producto.id_categoria)) || null : null;
+
+                // Corrección: Verificar que producto y producto.id_categoria existan
+                let categoria = null;
+                if (producto && producto.id_categoria) {
+                    categoria = categoriasMap.get(Number(producto.id_categoria)) || null;
+                }
+
+                const productor = productoresMap.get(Number(row.id_productor)) || null;
 
                 return {
                     id: row.id,
@@ -102,12 +113,26 @@ export async function GET(request: NextRequest) {
                     producto,
                     categoria,
                     region: regionesMap.get(Number(row.id_region)) || null,
-                    productor: productoresMap.get(Number(row.id_productor)) || null
+                    productor: productor ? {
+                        id: productor.id,
+                        nombre: productor.nombre,
+                        descripcion: productor.descripcion,
+                        historia: productor.historia,
+                        imagen: productor.imagen,
+                        latitud: productor.latitud,
+                        longitud: productor.longitud,
+                        estado: productor.estado,
+                        carpeta: productor.carpeta,
+                        telefono: productor.telefono,
+                        id_region: productor.id_region,
+                        id_categoria: productor.id_categoria
+                    } : null
                 };
             })
             .filter((item: any) => {
                 if (!item.producto) return false; // producto no existe o está desactivado
-                if (categoriaId && String(item.producto.id_categoria) !== String(categoriaId)) return false;
+                if (categoriaId && item.categoria && String(item.categoria.id) !== String(categoriaId)) return false;
+                if (categoriaId && !item.categoria) return false;
                 return true;
             });
 
