@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 
 export async function GET() {
   const { data, error } = await supabase
-    .from('region')
+    .from('regiones')
     .select('id, nombre')
     .order('nombre', { ascending: true });
 
