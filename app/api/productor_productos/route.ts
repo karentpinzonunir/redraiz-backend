@@ -6,7 +6,7 @@ export async function GET(request: NextRequest) {
     try {
         const { searchParams } = new URL(request.url);
 
-        const limit = Math.max(1, parseInt(searchParams.get('limit') || '10'));
+        const limit = Math.max(1, parseInt(searchParams.get('limit') || '200'));
         const offset = Math.max(0, parseInt(searchParams.get('offset') || '0'));
         const regionId = searchParams.get('region');
         const productorId = searchParams.get('productor');
