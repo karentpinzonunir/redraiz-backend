@@ -1,8 +1,11 @@
 import { supabase } from '@/lib/supabase';
 import { NextResponse } from 'next/server';
 
-export async function GET() {
-    const { data, error } = await supabase
+export async function GET(req: Request) {
+    const { searchParams } = new URL(req.url);
+    const limit = searchParams.get('limit');
+
+    let query = supabase
         .from('historias')
         .select(`
       id, 
@@ -18,6 +21,12 @@ export async function GET() {
       )
     `)
         .order('fecha', { ascending: false });
+
+    if (limit) {
+        query = query.limit(Number(limit));
+    }
+
+    const { data, error } = await query;
 
     if (error) {
         return NextResponse.json(
